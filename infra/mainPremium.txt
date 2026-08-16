@@ -1,0 +1,93 @@
+Esto es una version en la que no hay lock externo con bd para acceder (metodo mas nuevo)
+
+provider "aws" {
+  region     = "eu-west-1"
+  access_key = "fake-test-key"
+  secret_key = "fake-test-secret"
+
+  # Omitir validaciones de AWS real
+  skip_credentials_validation = true
+  skip_metadata_api_check     = true
+  skip_requesting_account_id  = true
+
+  # Forzar a Terraform a hablar con LocalStack
+  endpoints {
+    ec2 = "http://127.0.0.1:4566"
+  }
+}
+resource "aws_vpc" "main" {
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_hostnames = true
+
+  tags = {
+    Name = "my-vpc"
+  }
+}
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.1.0/24"
+  map_public_ip_on_launch = true
+}
+resource "aws_security_group" "web_sg" {
+  name   = "allow_web_ssh"
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    description = "Exponer SSH"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    description = "Exponer HTTP"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  ingress {
+    description = "Permitir API Go"
+    from_port   = 8000
+    to_port     = 8000
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    description = "Permitir todo el trafico de salida"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+resource "aws_instance" "app_server" {
+  ami                    = "ami-0c55b159cbfafe1f0"
+  instance_type          = "t2.micro"
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+  user_data              = <<-EOF
+                        #!/bin/bash
+                        apt-get update -y
+                        apt-get install -y docker.io
+                        systemctl start docker
+                        systemctl enable docker
+                        EOF
+  tags = {
+    Name = "HelloWorld"
+  }
+}
+output "vpc_id" {
+  description = "El ID de la VPC creada"
+  value       = aws_vpc.main.id
+}
+
+output "instancia_id" {
+  description = "El ID de la maquina virtual"
+  value       = aws_instance.app_server.id
+}
+
+output "ip_publica" {
+  description = "La IP publica (simulada) de la maquina"
+  value       = aws_instance.app_server.public_ip
+}

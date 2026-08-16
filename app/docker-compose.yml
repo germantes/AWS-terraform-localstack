@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:15-alpine
+    networks: 
+      - app-network
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: db
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    # Buena práctica: le decimos que espere a que la db se cree primero
+    depends_on:
+      - db
+    networks: 
+      - app-network
+
+volumes:
+  pg-data:
+    
+
+networks:
+  app-network:
+    driver: bridge
